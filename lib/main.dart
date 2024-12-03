@@ -11,7 +11,6 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Context-Aware System',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const HomeScreen(),
     );
