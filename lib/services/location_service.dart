@@ -39,7 +39,8 @@ class LocationService {
     }
 
     // Obter a posição atual
-    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
     return 'Latitude: ${position.latitude}, Longitude: ${position.longitude}';
   }
 }
