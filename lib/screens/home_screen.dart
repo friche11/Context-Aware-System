@@ -6,6 +6,8 @@ import '../services/location_service.dart';
 import 'units_list_screen.dart'; 
 import '../services/unit_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -92,26 +94,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   // Função para obter a localização atual
-  Future<void> _getCurrentLocation() async {
-    String location = await _locationService.getCurrentLocation();
-    List<String> coordinates = location.split(", ");
-    if (coordinates.length == 2) {
-      LatLng newLocation = LatLng(
-        double.parse(coordinates[0].split(": ")[1]),
-        double.parse(coordinates[1].split(": ")[1]),
-      );
+Future<void> _getCurrentLocation() async {
+  String location = await _locationService.getCurrentLocation();
+  List<String> coordinates = location.split(", ");
+  
+  if (coordinates.length == 2) {
+    LatLng newLocation = LatLng(
+      double.parse(coordinates[0].split(": ")[1]),
+      double.parse(coordinates[1].split(": ")[1]),
+    );
 
-      // Verifica se a nova localização é diferente da última
-      if (newLocation != _lastLocation) {
-        setState(() {
-          _currentLocation = newLocation;
-          _lastLocation = newLocation;
-        });
-        // Verifica a proximidade com as unidades quando a localização é atualizada
-        _checkProximity(newLocation);
-      }
+    double distanceInMeters = Geolocator.distanceBetween(
+      _lastLocation.latitude, _lastLocation.longitude,
+      newLocation.latitude, newLocation.longitude,
+    );
+
+    if (distanceInMeters >= 100) { // Atualiza apenas se houver deslocamento de 100m
+      setState(() {
+        _currentLocation = newLocation;
+        _lastLocation = newLocation;
+      });
+      _checkProximity(newLocation);
     }
   }
+}
 
   // Callback para detectar mudanças na posição do mapa
   void _onPositionChanged(MapPosition position, bool hasGesture) {
@@ -121,52 +127,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   // Função para verificar proximidade de uma unidade e mostrar a mensagem
-  void _checkProximity(LatLng location) {
-    // Verifica a distância entre a posição atual do usuário e as unidades
-    for (var unit in pucUnits) {
-      double distanceInMeters = Geolocator.distanceBetween(
-        location.latitude,
-        location.longitude,
-        unit['latitude'],
-        unit['longitude'],
-      );
-
-      // Se a distância for menor que 100 metros, e a mensagem não foi enviada
-      if (distanceInMeters < 100) {
-        // Verifica se já enviamos a mensagem para esta unidade
-        if (!_visitedUnits.contains(unit['name'])) {
-          _showWelcomeMessage(unit['name']);
-          setState(() {
-            _visitedUnits.add(unit['name']); // Marca a unidade como visitada
-          });
-        }
-      }
-      // Se o usuário sair da área de 100 metros, permite reenviar a mensagem
-      else if (distanceInMeters >= 100) {
-        if (_visitedUnits.contains(unit['name'])) {
-          setState(() {
-            _visitedUnits.remove(unit['name']); // Remove a unidade da lista de visitadas
-          });
-        }
-      }
-    }
-  }
-
-  void _showWelcomeMessage(String unitName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Bem-vindo!'),
-        content: Text('Bem-vindo à PUC Minas unidade $unitName'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
+Future<void> _checkProximity(LatLng location) async {
+  final url = Uri.parse("https://southamerica-east1-rapid-pact-444116-b2.cloudfunctions.net/function-1");
+  
+  try {
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'latitude': location.latitude,
+        'longitude': location.longitude,
+      }),
     );
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> responseBody = jsonDecode(response.body);
+
+      if (responseBody.containsKey('message') && responseBody['message'].isNotEmpty) {
+        _showWelcomeMessage(responseBody['message']);
+      }
+    } else {
+      print("Erro ao verificar proximidade: ${response.statusCode}");
+    }
+  } catch (error) {
+    print("Erro de conexão: $error");
   }
+}
+
+void _showWelcomeMessage(String message) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Bem-vindo!'),
+      content: Text(message),  // Exibe a mensagem corretamente
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Fechar'),
+        ),
+      ],
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
